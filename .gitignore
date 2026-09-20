@@ -32,3 +32,4 @@ docker-compose.env
 *.bak
 *.before-*
 *-backup
+SecureCloud_backup_copy/

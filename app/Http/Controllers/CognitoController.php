@@ -66,20 +66,31 @@ class CognitoController extends Controller
 
         // 6. Check token response
         if ($tokenResponse->failed()) {
+
+            error_log(
+                'COGNITO TOKEN EXCHANGE FAILED | HTTP ' .
+                $tokenResponse->status() .
+                ' | RESPONSE: ' .
+                $tokenResponse->body()
+            );
+
             return response()->json([
                 'error' => 'Token exchange failed.',
+                'status' => $tokenResponse->status(),
+                'details' => $tokenResponse->json(),
             ], 400);
         }
 
         $tokens = $tokenResponse->json();
 
+        // 7. Ensure access token exists
         if (empty($tokens['access_token'])) {
             return response()->json([
                 'error' => 'Access token was not received.',
             ], 400);
         }
 
-        // 7. Get Cognito user information
+        // 8. Get Cognito user information
         $userResponse = Http::withToken(
             $tokens['access_token']
         )->get(
@@ -88,13 +99,15 @@ class CognitoController extends Controller
 
         if ($userResponse->failed()) {
             return response()->json([
-                'error' => 'Could not retrieve user information.'
+                'error' => 'Could not retrieve user information.',
+                'status' => $userResponse->status(),
+                'details' => $userResponse->json(),
             ], 400);
         }
 
         $cognitoUser = $userResponse->json();
 
-        // 8. Get email
+        // 9. Get email
         $email = $cognitoUser['email'] ?? null;
 
         if (!$email) {
@@ -103,19 +116,19 @@ class CognitoController extends Controller
             ], 400);
         }
 
-        // 9. Get user's display name
+        // 10. Get user's display name
         $name =
             $cognitoUser['name']
             ?? $cognitoUser['username']
             ?? 'Cognito User';
 
-        // 10. Find local SecureCloud user
+        // 11. Find local SecureCloud user
         $localUser = User::where(
             'email',
             $email
         )->first();
 
-        // 11. Create local user if not found
+        // 12. Create local user if not found
         if (!$localUser) {
 
             $localUser = User::create([
@@ -134,7 +147,7 @@ class CognitoController extends Controller
             ]);
         }
 
-        // 12. BLOCKED USER CHECK
+        // 13. Blocked user check
         if (!$localUser->is_active) {
 
             SecurityEvent::create([
@@ -149,7 +162,7 @@ class CognitoController extends Controller
             // Remove temporary OAuth state
             session()->forget('cognito_state');
 
-            // Make sure no authenticated session remains
+            // Remove authenticated session data
             session()->forget([
                 'cognito_access_token',
                 'cognito_id_token',
@@ -165,7 +178,7 @@ class CognitoController extends Controller
                 );
         }
 
-        // 13. Calculate authentication risk
+        // 14. Calculate authentication risk
         $recentLoginCount = SecurityEvent::where(
             'user_id',
             $localUser->id
@@ -203,10 +216,10 @@ class CognitoController extends Controller
                 'Successful authentication through AWS Cognito.';
         }
 
-        // 14. Regenerate session
+        // 15. Regenerate session
         $request->session()->regenerate();
 
-        // 15. Store authentication information
+        // 16. Store authentication information
         session([
             'cognito_access_token' =>
                 $tokens['access_token'],
@@ -224,7 +237,7 @@ class CognitoController extends Controller
                 $localUser->role,
         ]);
 
-        // 16. Record successful login
+        // 17. Record successful login
         SecurityEvent::create([
             'user_id' => $localUser->id,
             'event_type' => 'login_success',
@@ -234,10 +247,10 @@ class CognitoController extends Controller
             'risk_level' => $riskLevel,
         ]);
 
-        // 17. Remove temporary OAuth state
+        // 18. Remove temporary OAuth state
         session()->forget('cognito_state');
 
-        // 18. Redirect authenticated user
+        // 19. Redirect authenticated user
         return redirect('/dashboard');
     }
 }
