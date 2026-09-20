@@ -5,6 +5,10 @@ services:
   app:
     container_name: securecloud_app
 
+    build:
+      context: .
+      dockerfile: Dockerfile
+
     image: securecloud:latest
 
     depends_on:
